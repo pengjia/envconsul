@@ -18,7 +18,8 @@ type PrefixConfig struct {
 func ParsePrefixConfig(s string) (*PrefixConfig, error) {
 	s = strings.TrimPrefix(s, "/")
 	return &PrefixConfig{
-		Path: config.String(s),
+		Path:     config.String(s),
+		NoPrefix: config.Bool(true),
 	}, nil
 }
 

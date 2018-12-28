@@ -84,6 +84,8 @@ type Config struct {
 
 	// Wait is the quiescence timers.
 	Wait *config.WaitConfig `mapstructure:"wait"`
+
+	ConfigFile *string `mapstructure:"config_file"`
 }
 
 // Copy returns a deep copy of the current configuration. This is useful because
@@ -134,6 +136,8 @@ func (c *Config) Copy() *Config {
 	if c.Wait != nil {
 		o.Wait = c.Wait.Copy()
 	}
+
+	o.ConfigFile = c.ConfigFile
 
 	return &o
 }
@@ -210,6 +214,10 @@ func (c *Config) Merge(o *Config) *Config {
 
 	if o.Wait != nil {
 		r.Wait = r.Wait.Merge(o.Wait)
+	}
+
+	if o.ConfigFile != nil {
+		r.ConfigFile = o.ConfigFile
 	}
 
 	return r
@@ -499,7 +507,8 @@ func (c *Config) GoString() string {
 		"Syslog:%s, "+
 		"Upcase:%s, "+
 		"Vault:%s, "+
-		"Wait:%s"+
+		"Wait:%s, "+
+		"ConfigFile:%s"+
 		"}",
 		c.Consul.GoString(),
 		c.Exec.GoString(),
@@ -516,6 +525,7 @@ func (c *Config) GoString() string {
 		config.BoolGoString(c.Upcase),
 		c.Vault.GoString(),
 		c.Wait.GoString(),
+		config.StringGoString(c.ConfigFile),
 	)
 }
 
@@ -608,6 +618,10 @@ func (c *Config) Finalize() {
 		c.Wait = config.DefaultWaitConfig()
 	}
 	c.Wait.Finalize()
+
+	if c.ConfigFile == nil {
+		c.ConfigFile = config.String("")
+	}
 }
 
 func stringFromEnv(list []string, def string) *string {

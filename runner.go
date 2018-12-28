@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
@@ -272,12 +273,6 @@ func (r *Runner) Run() (<-chan int, error) {
 
 	// Update the environment
 	r.env = env
-
-	if r.child != nil {
-		log.Printf("[INFO] (runner) stopping existing child process")
-		r.stopChild()
-	}
-
 	// Create a new environment
 	newEnv := make(map[string]string)
 
@@ -294,13 +289,15 @@ func (r *Runner) Run() (<-chan int, error) {
 		newEnv[k] = v
 	}
 
-	// Prepare the final environment. Note that it's CRUCIAL for us to
-	// initialize this slice to an empty one vs. a nil one, since that's
-	// how the child process class decides whether to pull in the parent's
-	// environment or not, and we control that via -pristine.
-	cmdEnv := make([]string, 0)
-	for k, v := range newEnv {
-		cmdEnv = append(cmdEnv, fmt.Sprintf("%s=%s", k, v))
+	err := r.updateConfiguration(newEnv)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to update configuration")
+	}
+
+	if r.child != nil {
+		log.Printf("[INFO] (runner) reload existing child process")
+		r.reloadChild()
+		return nil, nil
 	}
 
 	p := shellwords.NewParser()
@@ -317,7 +314,7 @@ func (r *Runner) Run() (<-chan int, error) {
 		Stderr:       r.errStream,
 		Command:      args[0],
 		Args:         args[1:],
-		Env:          cmdEnv,
+		Env:          make([]string, 0),
 		Timeout:      0, // Allow running indefinitely
 		ReloadSignal: config.SignalVal(r.config.Exec.ReloadSignal),
 		KillSignal:   config.SignalVal(r.config.Exec.KillSignal),
@@ -508,6 +505,20 @@ func (r *Runner) appendSecrets(
 	return nil
 }
 
+func (r *Runner) updateConfiguration(env map[string]string) error {
+	cmdEnv := make([]string, 0)
+	for k, v := range env {
+		cmdEnv = append(cmdEnv, fmt.Sprintf("%s=\"%s\"", k, v))
+	}
+	configuration := strings.Join(cmdEnv[:], "\n")
+	err := ioutil.WriteFile(*r.config.ConfigFile, []byte(configuration), 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // init creates the Runner's underlying data structures and returns an error if
 // any problems occur.
 func (r *Runner) init() error {
@@ -588,6 +599,16 @@ func (r *Runner) stopChild() {
 	if r.child != nil {
 		log.Printf("[DEBUG] (runner) stopping child process")
 		r.child.Stop()
+	}
+}
+
+func (r *Runner) reloadChild() {
+	r.childLock.RLock()
+	defer r.childLock.RUnlock()
+
+	if r.child != nil {
+		log.Printf("[DEBUG] (runner) reload child process")
+		r.child.Reload()
 	}
 }
 
